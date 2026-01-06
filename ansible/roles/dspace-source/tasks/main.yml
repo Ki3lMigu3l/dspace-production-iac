@@ -1,0 +1,40 @@
+---
+- name: Create build directory
+  file:
+    path: /build
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Download DSpace 9.2
+  get_url:
+    url: https://github.com/DSpace/DSpace/archive/refs/tags/dspace-9.2.tar.gz
+    dest: /build/dspace-9.2.tar.gz
+    mode: "0644"
+  become: true
+  register: dspace_download
+
+- name: Extract DSpace source
+  unarchive:
+    src: /build/dspace-9.2.tar.gz
+    dest: /build
+    remote_src: true
+    owner: dspace
+    group: dspace
+  become: true
+  when: dspace_download.changed
+
+- name: Set permissions on build directory
+  file:
+    path: /build
+    owner: dspace
+    group: dspace
+    recurse: true
+    mode: "0777"
+  become: true
+
+- name: Display DSpace source location
+  debug:
+    msg:
+      - "DSpace source downloaded to: /build/DSpace-dspace-9.2"
+      - "Build directory permissions set for dspace user"
