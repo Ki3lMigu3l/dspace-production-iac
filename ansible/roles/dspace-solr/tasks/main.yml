@@ -1,0 +1,126 @@
+# roles/dspace-solr/tasks/main.yml
+---
+- name: Stop Solr service before configuration
+  shell: |
+    sudo -u dspace /opt/solr-9.10.0/bin/solr stop -all
+  become: true
+  ignore_errors: true
+
+- name: Check DSpace Solr cores exist
+  stat:
+    path: /dspace/solr
+  register: dspace_solr_cores
+  become: true
+
+- name: Display DSpace Solr cores
+  debug:
+    msg:
+      - "DSpace Solr cores location: /dspace/solr"
+      - "Cores exist: {{ 'Yes' if dspace_solr_cores.stat.exists else 'No' }}"
+      - "If 'No', DSpace installation may have failed"
+
+- name: Create Solr configsets directory
+  file:
+    path: /opt/solr-9.10.0/server/solr/configsets
+    state: directory
+    owner: dspace
+    group: dspace
+    mode: "0755"
+  become: true
+  when: dspace_solr_cores.stat.exists
+
+- name: Copy DSpace Solr cores to Solr configsets
+  shell: |
+    echo "Copying DSpace Solr cores..."
+
+    # List available cores
+    echo "Available DSpace cores:"
+    ls -la /dspace/solr/
+
+    # Copy all cores
+    cp -R /dspace/solr/* /opt/solr-9.10.0/server/solr/configsets/
+
+    # Set correct permissions
+    chown -R dspace:dspace /opt/solr-9.10.0/server/solr/configsets/
+
+    echo "Copied cores:"
+    ls -la /opt/solr-9.10.0/server/solr/configsets/
+  become: true
+  when: dspace_solr_cores.stat.exists
+
+- name: Create Solr core.properties files
+  shell: |
+    echo "Creating core.properties files..."
+
+    for core in /opt/solr-9.10.0/server/solr/configsets/*; do
+      if [ -d "$core" ]; then
+        core_name=$(basename "$core")
+        echo "Configuring core: $core_name"
+
+        cat > "$core/core.properties" <<EOF
+    name=$core_name
+    config=solrconfig.xml
+    schema=schema.xml
+    dataDir=/opt/solr-9.10.0/server/solr/$core_name/data
+    EOF
+
+        mkdir -p "/opt/solr-9.10.0/server/solr/$core_name/data"
+      fi
+    done
+
+    chown -R dspace:dspace /opt/solr-9.10.0/server/solr/
+  become: true
+  when: dspace_solr_cores.stat.exists
+
+- name: Start Solr service
+  shell: |
+    echo "Starting Solr with DSpace cores..."
+    sudo -u dspace /opt/solr-9.10.0/bin/solr start
+  become: true
+
+- name: Wait for Solr to initialize
+  pause:
+    seconds: 20
+
+- name: Verify Solr cores are loaded
+  shell: |
+    echo "Checking Solr cores status..."
+
+    # Try to get cores status
+    curl -s "http://localhost:8983/solr/admin/cores?action=STATUS&wt=json" 2>/dev/null | \
+      python3 -c "import sys,json; data=json.load(sys.stdin); \
+      cores=[k for k in data['status'].keys()]; \
+      print('Loaded cores:', ', '.join(cores) if cores else 'No cores found')" \
+      || echo "Could not connect to Solr"
+  register: solr_cores_status
+  changed_when: false
+  become: true
+
+- name: Test each DSpace core
+  shell: |
+    echo "Testing DSpace Solr cores..."
+
+    # Test search core (most important)
+    echo "Testing 'search' core:"
+    curl -s "http://localhost:8983/solr/search/select?q=*:*&rows=0" 2>/dev/null | \
+      grep -q "response" && echo "✅ search core OK" || echo "❌ search core failed"
+
+    # Test other cores
+    for core in authority oai statistics; do
+      echo "Testing '$core' core:"
+      curl -s "http://localhost:8983/solr/$core/select?q=*:*&rows=0" 2>/dev/null | \
+        grep -q "response" && echo "✅ $core core OK" || echo "⚠️  $core core may not be responding"
+    done
+  register: solr_cores_test
+  changed_when: false
+  become: true
+
+- name: Display Solr configuration status
+  debug:
+    msg:
+      - "🔍 Solr Configuration Complete"
+      - "📍 Solr URL: http://localhost:8983/solr"
+      - "📁 Configsets: /opt/solr-9.10.0/server/solr/configsets"
+      - "🎯 DSpace cores copied: {{ 'Yes' if dspace_solr_cores.stat.exists else 'FAILED - check DSpace installation' }}"
+      - "📊 Cores status: {{ solr_cores_status.stdout }}"
+      - "🚀 Next: Configure DSpace local.cfg with: solr.server = http://localhost:8983/solr"

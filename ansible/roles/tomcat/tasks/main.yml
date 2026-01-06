@@ -1,0 +1,155 @@
+# roles/tomcat/tasks/main.yml (INSTALAÇÃO MANUAL)
+---
+- name: Remove any existing Tomcat
+  apt:
+    name:
+      - tomcat9
+      - tomcat8
+    state: absent
+  become: true
+  ignore_errors: true
+
+- name: Install dependencies
+  apt:
+    name:
+      - wget
+      - tar
+      - default-jdk
+    state: present
+  become: true
+
+- name: Download Tomcat 10.1.x
+  get_url:
+    url: https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.24/bin/apache-tomcat-10.1.24.tar.gz
+    dest: /tmp/apache-tomcat-10.1.24.tar.gz
+    mode: "0644"
+  become: true
+
+- name: Extract Tomcat to /opt
+  unarchive:
+    src: /tmp/apache-tomcat-10.1.24.tar.gz
+    dest: /opt
+    remote_src: true
+    owner: root
+    group: root
+  become: true
+
+- name: Create symlink /opt/tomcat
+  file:
+    src: /opt/apache-tomcat-10.1.24
+    dest: /opt/tomcat
+    state: link
+  become: true
+
+- name: Create tomcat user and group
+  user:
+    name: tomcat
+    shell: /bin/false
+    create_home: no
+    system: true
+  become: true
+
+- name: Set Tomcat directory permissions
+  shell: |
+    chown -R tomcat:tomcat /opt/apache-tomcat-10.1.24
+    chown -R tomcat:tomcat /opt/tomcat
+    chmod +x /opt/tomcat/bin/*.sh
+  become: true
+
+- name: Create systemd service for Tomcat
+  copy:
+    dest: /etc/systemd/system/tomcat.service
+    content: |
+      [Unit]
+      Description=Apache Tomcat 10
+      After=network.target postgresql.service
+
+      [Service]
+      Type=forking
+      User=tomcat
+      Group=tomcat
+
+      Environment="JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64"
+      Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
+      Environment="CATALINA_HOME=/opt/tomcat"
+      Environment="CATALINA_BASE=/opt/tomcat"
+      Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC -Dfile.encoding=UTF-8"
+      Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
+
+      ExecStart=/opt/tomcat/bin/startup.sh
+      ExecStop=/opt/tomcat/bin/shutdown.sh
+
+      ReadWritePaths=/dspace/
+
+      RestartSec=10
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Configure Tomcat server.xml for UTF-8
+  blockinfile:
+    path: /opt/tomcat/conf/server.xml
+    marker: "# {mark} DSpace UTF-8 Configuration"
+    block: |
+      <!-- DSpace UTF-8 Connector Configuration -->
+      <Connector port="8080" protocol="HTTP/1.1"
+                 minSpareThreads="25"
+                 enableLookups="false"
+                 redirectPort="8443"
+                 connectionTimeout="20000"
+                 disableUploadTimeout="true"
+                 URIEncoding="UTF-8"
+                 maxParameterCount="1000"/>
+  become: true
+
+- name: Comment out default connector
+  replace:
+    path: /opt/tomcat/conf/server.xml
+    regexp: '<Connector port="8080" protocol="HTTP/1.1"\s+connectionTimeout="20000"\s+redirectPort="8443"\s*/>'
+    replace: '<!-- Default connector commented for DSpace -->\n      <!-- <Connector port="8080" protocol="HTTP/1.1"\n               connectionTimeout="20000"\n               redirectPort="8443" /> -->'
+  become: true
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: Start and enable Tomcat service
+  systemd:
+    name: tomcat
+    state: started
+    enabled: true
+  become: true
+
+- name: Wait for Tomcat to start
+  pause:
+    seconds: 15
+
+- name: Test Tomcat
+  uri:
+    url: http://localhost:8080/
+    method: GET
+    status_code: 200
+    timeout: 30
+  register: tomcat_test
+  until: tomcat_test.status == 200
+  retries: 5
+  delay: 5
+  ignore_errors: true
+
+- name: Display Tomcat information
+  debug:
+    msg:
+      - "✅ Tomcat 10.1.24 installed manually"
+      - "📍 Location: /opt/tomcat"
+      - "👤 User: tomcat"
+      - "🌐 Port: 8080"
+      - "🔤 UTF-8 encoding: Enabled"
+      - "📁 DSpace access: /dspace directory allowed"
+      - "🔄 Service: tomcat.service"
+      - "✅ Status: {{ 'Running' if tomcat_test.status == 200 else 'Check manually' }}"
