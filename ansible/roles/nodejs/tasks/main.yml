@@ -1,0 +1,35 @@
+# roles/nodejs-install/tasks/main.yml
+---
+- name: Install Node.js and npm from NodeSource repository
+  shell: |
+    # Install NodeSource repository (Node.js 20 LTS)
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+
+    # Install Node.js and npm
+    apt-get install -y nodejs
+
+    # Verify installation
+    node --version
+    npm --version
+  become: true
+
+- name: Update npm to latest version
+  shell: |
+    npm install -g npm@latest
+    npm --version
+  become: true
+
+- name: Install PM2 globally
+  shell: |
+    npm install -g pm2
+    pm2 --version
+  become: true
+
+- name: Verify installation for dspace user
+  shell: |
+    sudo -u dspace node --version
+    sudo -u dspace npm --version
+    sudo -u dspace pm2 --version 2>/dev/null || echo "PM2 will be installed later"
+  register: node_verify
+  changed_when: false
+  become: true
