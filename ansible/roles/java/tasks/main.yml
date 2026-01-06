@@ -1,35 +1,9 @@
----
-- name: Install OpenJDK 17 JDK
+# roles/java/tasks/main.yml
+- name: Install OpenJDK 17
   apt:
     name: openjdk-17-jdk
     state: present
-  become: true
 
-- name: Find Java 17 installation path
-  shell: |
-    dirname $(dirname $(readlink -f $(which java)))
-  register: java_path
-  changed_when: false
-  become: true
-
-- name: Configure Java environment variables with dynamic path
-  blockinfile:
-    path: /etc/environment
-    block: |
-      JAVA_HOME="{{ java_path.stdout }}"
-      JAVA_OPTS="-Xmx512M -Xms64M -Dfile.encoding=UTF-8"
-    marker: "# {mark} ANSIBLE JAVA CONFIG"
-    create: true
-  become: true
-
-- name: Reload environment and verify
-  shell: |
-    source /etc/environment
-    echo "Java version:"
-    java -version
-    echo ""
-    echo "JAVA_HOME: $JAVA_HOME"
-    echo "JAVA_OPTS: $JAVA_OPTS"
-  register: java_verification
-  changed_when: false
-  become: true
+- name: Set java_home fact
+  set_fact:
+    java_home: /usr/lib/jvm/java-17-openjdk-amd64
