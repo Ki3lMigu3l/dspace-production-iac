@@ -1,0 +1,22 @@
+---
+- name: DSpace 9 to Production
+  hosts: dspace
+  become: true
+  vars:
+    java_version: 17
+    maven_version: 3.9.6
+
+  roles:
+    - common
+    - java
+    - maven
+    - postgresql
+    - solr
+    - dspace-source
+    - dspace-build
+    - dspace-install
+    - dspace-solr
+    - tomcat
+    - dspace-deploy
+    - nodejs
+    - dspace-frontend
