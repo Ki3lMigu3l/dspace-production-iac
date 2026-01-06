@@ -1,0 +1,72 @@
+---
+- name: Download Solr 9.10.0 to /opt
+  get_url:
+    url: https://archive.apache.org/dist/solr/solr/9.10.0/solr-9.10.0.tgz
+    dest: /opt/solr-9.10.0.tgz
+    mode: "0644"
+  become: true
+
+- name: Extract Solr
+  unarchive:
+    src: /opt/solr-9.10.0.tgz
+    dest: /opt
+    remote_src: true
+    owner: root
+    group: root
+  become: true
+
+- name: Change Solr ownership to dspace user
+  file:
+    path: /opt/solr-9.10.0
+    owner: dspace
+    group: dspace
+    recurse: true
+  become: true
+
+- name: Configure Solr to listen on all interfaces
+  lineinfile:
+    path: /opt/solr-9.10.0/bin/solr.in.sh
+    regexp: "^#?SOLR_JETTY_HOST="
+    line: 'SOLR_JETTY_HOST="0.0.0.0"'
+  become: true
+
+- name: Add Solr config lib enabled for versions 9.8+
+  lineinfile:
+    path: /opt/solr-9.10.0/bin/solr.in.sh
+    line: 'SOLR_OPTS="-Dsolr.config.lib.enabled=true $SOLR_OPTS"'
+  become: true
+
+- name: Start Solr as dspace user
+  shell: |
+    sudo -u dspace /opt/solr-9.10.0/bin/solr start
+  become: true
+
+- name: Add Solr to dspace user's crontab for auto-start
+  cron:
+    name: "Start Solr on reboot"
+    user: dspace
+    job: "/opt/solr-9.10.0/bin/solr start"
+    special_time: reboot
+  become: true
+
+- name: Restart cron service
+  systemd:
+    name: cron
+    state: restarted
+  become: true
+
+- name: Check Solr status
+  shell: |
+    sudo -u dspace /opt/solr-9.10.0/bin/solr status
+  register: solr_status
+  changed_when: false
+  become: true
+
+- name: Display Solr information
+  debug:
+    msg:
+      - "Solr 9.10.0 installed in /opt/solr-9.10.0"
+      - "Ownership: dspace:dspace"
+      - "Listening on: 0.0.0.0:8983"
+      - "Status: {{ 'Running' if 'running' in solr_status.stdout else 'Not running' }}"
+      - "Auto-start on reboot: Enabled"
