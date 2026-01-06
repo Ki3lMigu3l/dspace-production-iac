@@ -1,62 +1,59 @@
-# roles/maven/tasks/main.yml (VERSÃO COM MÓDULOS ANSIBLE)
 ---
-- name: Remove any existing broken Maven installation
-  shell: |
-    apt remove -y maven maven2 2>/dev/null || true
-    rm -rf /opt/maven* /opt/apache-maven* 2>/dev/null || true
-    rm -f /usr/local/bin/mvn /usr/bin/mvn 2>/dev/null || true
-  become: true
+- name: Install required packages
+  package:
+    name:
+      - acl
+      - sudo
+    state: present
+  become: yes
+
+- name: Define Maven base paths
+  set_fact:
+    maven_install_dir: /opt/apache-maven-{{ maven_version }}
+    maven_symlink: /opt/maven
+
+- name: Check if Maven is already installed
+  stat:
+    path: "{{ maven_install_dir }}"
+  register: maven_dir
 
 - name: Download Maven {{ maven_version }}
   get_url:
     url: "https://archive.apache.org/dist/maven/maven-3/{{ maven_version }}/binaries/apache-maven-{{ maven_version }}-bin.tar.gz"
-    dest: /tmp/apache-maven-{{ maven_version }}-bin.tar.gz
+    dest: "/tmp/apache-maven-{{ maven_version }}-bin.tar.gz"
     mode: "0644"
-  become: true
+  when: not maven_dir.stat.exists
 
 - name: Extract Maven to /opt
   unarchive:
-    src: /tmp/apache-maven-{{ maven_version }}-bin.tar.gz
+    src: "/tmp/apache-maven-{{ maven_version }}-bin.tar.gz"
     dest: /opt
     remote_src: yes
     owner: root
     group: root
-  become: true
+  args:
+    creates: "{{ maven_install_dir }}"
+  when: not maven_dir.stat.exists
 
-- name: Create symlink /opt/maven
+- name: Create /opt/maven symlink
   file:
-    src: "/opt/apache-maven-{{ maven_version }}"
-    dest: /opt/maven
+    src: "{{ maven_install_dir }}"
+    dest: "{{ maven_symlink }}"
     state: link
-  become: true
 
-- name: Create symbolic links in PATH
+- name: Ensure mvn is available in PATH
   file:
-    src: "/opt/maven/bin/mvn"
-    dest: "{{ item }}"
+    src: "{{ maven_symlink }}/bin/mvn"
+    dest: /usr/local/bin/mvn
     state: link
-    force: yes
-  with_items:
-    - /usr/local/bin/mvn
-    - /usr/bin/mvn
-  become: true
 
-- name: Install Ant
-  apt:
-    name: ant
-    state: present
-  become: true
-
-- name: Verify Maven installation
-  shell: |
-    /opt/maven/bin/mvn --version
+- name: Verify Maven installation (root)
+  command: mvn --version
   register: maven_verify
   changed_when: false
-  become: true
 
-- name: Test Maven as dspace user
-  shell: |
-    sudo -u dspace /opt/maven/bin/mvn --version
-  register: dspace_test
+- name: Verify Maven installation (dspace user)
+  command: mvn --version
+  become_user: dspace
+  register: maven_verify_dspace
   changed_when: false
-  become: true
