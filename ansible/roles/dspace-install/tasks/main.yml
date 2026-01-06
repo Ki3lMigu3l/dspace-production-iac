@@ -1,0 +1,31 @@
+# roles/dspace-install/tasks/main.yml
+---
+- name: Install DSpace using Ant
+  shell: |
+    echo "Installing DSpace to /dspace..."
+    cd /build/DSpace-dspace-9.2/dspace/target/dspace-installer
+    sudo -u dspace ant fresh_install
+  become: true
+
+- name: Initialize DSpace database
+  shell: |
+    echo "Initializing DSpace database..."
+    cd /dspace/bin
+    sudo -u dspace ./dspace database migrate
+  become: true
+
+- name: Verify database initialization
+  shell: |
+    echo "Checking database status..."
+    cd /dspace/bin
+    sudo -u dspace ./dspace database info
+  register: db_info
+  changed_when: false
+  become: true
+
+- name: Display installation status
+  debug:
+    msg:
+      - "DSpace installation completed!"
+      - "Installation directory: /dspace"
+      - "Database status: {{ 'Initialized' if 'Success' in db_info.stdout else 'Check manually' }}"
