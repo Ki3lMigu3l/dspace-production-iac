@@ -1,0 +1,73 @@
+# roles/dspace-deploy/tasks/main.yml
+---
+- name: Stop Tomcat before deployment
+  systemd:
+    name: tomcat
+    state: stopped
+  become: true
+
+- name: Clean Tomcat webapps directory
+  shell: |
+    # Remove old deployments if any
+    rm -rf /var/lib/tomcat/webapps/server
+    rm -rf /var/lib/tomcat/webapps/ROOT
+  become: true
+
+- name: Deploy DSpace server webapp (exploded)
+  shell: |
+    echo "Deploying DSpace server webapp..."
+
+    rm -rf /opt/tomcat/webapps/server
+    cp -R /dspace/webapps/server /opt/tomcat/webapps/
+
+    chown -R tomcat:tomcat /opt/tomcat/webapps/server
+  become: true
+
+- name: Alternative deployment (context file method)
+  shell: |
+    # Alternative: Create context file (Technique A from documentation)
+    mkdir -p /etc/tomcat/Catalina/localhost
+
+    cat > /etc/tomcat/Catalina/localhost/server.xml << 'EOF'
+    <?xml version='1.0'?>
+    <Context docBase="/dspace/webapps/server"/>
+    EOF
+
+    chown tomcat:tomcat /etc/tomcat/Catalina/localhost/server.xml
+  become: true
+  when: false # Desativada por padrão, use Technique B acima
+
+- name: Start Tomcat after deployment
+  systemd:
+    name: tomcat
+    state: started
+  become: true
+
+- name: Wait for DSpace to start
+  pause:
+    seconds: 30
+
+- name: Test DSpace REST API
+  uri:
+    url: http://localhost:8080/server/api/core/status
+    method: GET
+    status_code: 200
+    timeout: 30
+  register: api_test
+  until: api_test.status == 200
+  retries: 5
+  delay: 10
+
+- name: Restart Tomcat after DSpace deploy
+  systemd:
+    name: tomcat
+    state: restarted
+  become: true
+
+- name: Display deployment status
+  debug:
+    msg:
+      - "DSpace deployed to Tomcat 10"
+      - "REST API: http://localhost:8080/server/api/"
+      - "OAI-PMH: http://localhost:8080/server/oai/request?verb=Identify"
+      - "API accessible: {{ 'Yes' if api_test.status == 200 else 'Checking...' }}"
