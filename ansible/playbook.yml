@@ -3,20 +3,32 @@
   hosts: dspace
   become: true
   vars:
+    dspace_version: "9.2"
     java_version: 17
     maven_version: 3.9.6
+    postgres_version: 14
+
+    dspace_db_name: dspace
+    dspace_db_user: dspace
+    dspace_db_password: dspace
+
+    dspace_src_dir: "/usr/local/src/dspace/source"
+    dspace_src: "/usr/local/src/dspace/source/current"
+    dspace_install_dir: "/dspace"
+    dspace_installer: "{{ dspace_src }}/dspace/target/dspace-installer"
 
   roles:
-    - common
-    - java
-    - maven
-    - postgresql
+    # - common
+    # - dspace-infra
+    # - java
+    # - maven
+    # - postgresql
     - solr
-    - dspace-source
-    - dspace-build
-    - dspace-install
-    - dspace-solr
-    - tomcat
-    - dspace-deploy
-    - nodejs
-    - dspace-frontend
+    # - dspace-source
+    # - dspace-build
+    # - dspace-install
+    # - dspace-solr
+    # - tomcat
+    # - dspace-deploy
+    # - nodejs
+    # - dspace-frontend
