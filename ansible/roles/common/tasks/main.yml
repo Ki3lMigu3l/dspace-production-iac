@@ -1,0 +1,39 @@
+---
+- name: Update and upgrade system packages
+  shell: apt update && apt upgrade -y
+  become: true
+
+- name: Create dspace user
+  user:
+    name: dspace
+    password: "{{ 'dspace' | password_hash('sha512') }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+  become: true
+
+- name: Add dspace user to sudoers group
+  shell: usermod -aG sudo dspace
+  become: true
+
+- name: Create DSpace installation directory
+  file:
+    path: /dspace
+    state: directory
+    owner: dspace
+    group: dspace
+    mode: "0755"
+  become: true
+
+- name: Install required packages
+  apt:
+    name:
+      - wget
+      - curl
+      - git
+      - build-essential
+      - gedit
+      - zip
+      - unzip
+    state: present
+  become: true
