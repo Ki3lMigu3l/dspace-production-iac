@@ -1,0 +1,26 @@
+# roles/dspace-infra/tasks/main.yml
+- name: Create dspace group
+  group:
+    name: dspace
+    state: present
+
+- name: Create dspace user
+  user:
+    name: dspace
+    group: dspace
+    shell: /bin/bash
+    create_home: true
+    password_lock: true
+
+- name: Create base directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: dspace
+    group: dspace
+    mode: "0755"
+  loop:
+    - /dspace
+    - /dspace/assetstore
+    - /dspace/solr
+    - /dspace/install
