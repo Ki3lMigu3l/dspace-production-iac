@@ -1,0 +1,55 @@
+# roles/dspace-build/tasks/main.yml
+---
+- name: Configure DSpace
+  shell: |
+    cd /build/DSpace-dspace-9.2/dspace/config
+    # Backup original
+    cp local.cfg.EXAMPLE local.cfg.EXAMPLE.backup 2>/dev/null || true
+
+    # Create working config
+    cat > local.cfg << 'EOF'
+    dspace.dir = /dspace
+    dspace.server.url = http://localhost:8080/server
+    db.url = jdbc:postgresql://localhost:5432/dspace
+    db.username = dspace
+    db.password = dspace
+    solr.server = http://localhost:8983/solr
+    default.language = en_US
+    EOF
+
+    chown dspace:dspace local.cfg
+  become: true
+
+- name: Build DSpace
+  shell: |
+    echo "Starting DSpace 9.2 build..."
+    echo "This may take 15-30 minutes..."
+
+    # Build with full path to mvn
+    cd /build/DSpace-dspace-9.2
+    sudo -u dspace env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /opt/maven/bin/mvn clean package -DskipTests
+  become: true
+  async: 2400 # 40 minutes timeout
+  poll: 30
+
+- name: Check build result
+  shell: |
+    echo "Checking build results..."
+    if [ -f "/build/DSpace-dspace-9.2/dspace/target/dspace-installer/build.xml" ]; then
+      echo "✅ DSpace build successful!"
+      echo ""
+      echo "Installer location:"
+      ls -la /build/DSpace-dspace-9.2/dspace/target/dspace-installer/
+      echo ""
+      echo "WAR files created:"
+      find /build/DSpace-dspace-9.2 -name "*.war" -type f 2>/dev/null
+    else
+      echo "❌ DSpace build failed"
+      echo ""
+      echo "Checking for any build output..."
+      find /build/DSpace-dspace-9.2 -name "target" -type d | head -3 | xargs -I {} ls -la {} 2>/dev/null || true
+      exit 1
+    fi
+  register: build_result
+  changed_when: false
+  become: true
